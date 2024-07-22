@@ -197,31 +197,57 @@ def parse_expression(token_list, do_app, depth):
 
     return expr, rest
 
+highest = 0
 
 def eval_expr(expr):
-
+    global highest
     if isinstance(expr, Abstraction):
         return Abstraction(expr.variable, eval_expr(expr.expression))
 
+    # if variable, leave
     if not isinstance(expr, Application):
         return expr
 
     if not isinstance(expr.fn, Abstraction):
         reduced_left = eval_expr(expr.fn)
         if not isinstance(reduced_left, Abstraction):
-            return Application(reduced_left, expr.operand)
+            return Application(reduced_left, eval_expr(expr.operand))
 
-        return eval_expr(Application(reduced_left, expr.operand))
-
+        return eval_expr(Application(reduced_left, eval_expr(expr.operand)))
 
     # when applying (Lx. T1) T2
     # we just return T1[x->T2]
-    return eval_expr(substitute_expr(expr.fn.variable, expr.operand, expr.fn.expression))
+
+    to_replace = get_variable_names(eval_expr(expr.fn))
+    op = expr.operand
+    for v in to_replace:
+        op = rename_variable(v, str(highest), op)
+        highest += 1
+
+    return eval_expr(substitute_expr(expr.fn.variable, op, expr.fn.expression))
 
 # (Lx.x y) T
 
 # subst(x, 'x y', T)
 # Application(subst(x, 'x', T), subst(x, 'y', T))
+
+def get_variable_names(expr):
+    if isinstance(expr, Variable):
+        return { expr.name }
+    elif isinstance(expr, Application):
+        return get_variable_names(expr.fn) | get_variable_names(expr.operand)
+    elif isinstance(expr, Abstraction):
+        return {expr.variable} | get_variable_names(expr.expression)
+
+def rename_variable(old : str, new : str, expr):
+    if isinstance(expr, Variable):
+        return Variable(new if expr.name == old else expr.name)
+    elif isinstance(expr, Application):
+        return Application(rename_variable(old, new, expr.fn), rename_variable(old, new, expr.operand))
+    elif isinstance(expr, Abstraction):
+        if expr.variable == old:
+            return Abstraction(new, rename_variable(old, new, expr.expression))
+        return Abstraction(expr.variable, rename_variable(old, new, expr.expression))
 
 def substitute_expr(var_name: str, applicand, expr):
     if isinstance(expr, Variable):
@@ -258,8 +284,8 @@ def make_unique(expr, next_id):
 
 if __name__ == '__main__':
     # expression = '(Lx.a x) d'
-    # expression = '(Lm.Ln.m (La.Lb.Lc.b (a b c)) n) (Lx.Ly.x x y) (Lx.Ly.x y)'
-    expression = '(Lx.Ly.x x y) (Lx.Ly.x y)'
+    expression = '(Lm.Ln.m (La.Lb.Lc.b (a b c)) n) (Lx.Ly.x (x y)) (Ls.Lz.s z)'
+    # expression = '(Ln.Ls.Lz.s (n s z)) (Ls.Lz.z)'
 
 
     print('--------START TOKENIZING---------')
