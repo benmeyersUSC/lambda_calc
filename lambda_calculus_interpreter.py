@@ -5,67 +5,111 @@
 """
 import re
 import functools as func
-def build_token_grabber(dct):
+# global variable used to Alpha-reduce expressions with same variable name
+highest = 0
+
+def build_token_grabber():
+    """
+    Construct RegEx string for tokenizer
+    :return: RegEx string for re.match based on all token types
+    """
+    token_dict = {
+        't_lambda': r'L',
+        't_left_paren': r'\(',
+        't_right_paren': r'\)',
+        't_variable': r'[a-z]+',
+        't_dot': r'\.',
+        't_whitespace': r'\s+'
+    }
+    dct = token_dict
     return r'^(' + '|'.join([ f'(?P<{k}>{dct[k]})' for k in dct ]) + ')'
 
-# Tokens for lexing
-t_lambda = r'L'
-t_left_paren = r'\('
-t_right_paren = r'\)'
-t_variable = r'[a-z]'
-t_dot = r'\.'
-t_whitespace = r'\s+'
-
-token_dict = {
-    't_lambda': r'L',
-    't_left_paren': r'\(',
-    't_right_paren': r'\)',
-    't_variable': r'[a-z]',
-    't_dot': r'\.',
-    't_whitespace': r'\s+'
-}
 
 class Token:
+    """
+    Base class for token types
+    Essentially just for REPR to return name of which Token child instance it is
+    """
     def __init__(self):
         pass
 
     def __repr__(self):
         return self.__class__.__name__
 
+
 class LParen(Token):
+    """
+    Left parenthesis Token
+    """
     def __init__(self):
         super().__init__()
+
 
 class RParen(Token):
+    """
+    Right parenthesis Token
+    """
     def __init__(self):
         super().__init__()
+
 
 class Lambda(Token):
+    """
+    lambda call ("L") Token
+    """
     def __init__(self):
         super().__init__()
 
+
 class VarToken(Token):
+    """
+    Token for any variable
+    - Attribute VAL is the value or name of the variable
+    """
     def __init__(self, val: str):
         super().__init__()
         self.val = val
     def __repr__(self):
+        """
+        Give instance name, not class name
+        :return: name/VAL of variable, not the name VarToken
+        """
         return super().__repr__() + f': {self.val}'
 
+
 class Whitespace(Token):
+    """
+    Whitespace token
+    """
     def __init__(self):
         super().__init__()
+
 
 class Period(Token):
+    """
+    Period Token
+    """
     def __init__(self):
         super().__init__()
 
-def take_next_token(text: str):
-    match_result = re.match(build_token_grabber(token_dict), text)
-    result = None
+
+def take_next_token(text: str) -> tuple:
+    """
+    Called many times in tokenize()
+    Gets and creates token class instance of next closest token (space separated)
+
+    :param text: Lambda Calculus source code
+    :return: Next token, rest of code
+    """
+    # return token type (in terms of our string dict) of NEXT token
+    match_result = re.match(build_token_grabber(), text)
+    token_result = None
 
     if match_result is None:
+        # nothing in the remainder of the file matched any token
         raise Exception("Lambda invalid syntax")
 
+    # get token and get rest
     span = match_result.span()
     token = text[span[0]:span[1]]
     rest = text[span[1]:]
@@ -75,23 +119,31 @@ def take_next_token(text: str):
         mtch = dct[k]
         if mtch is None:
             continue
-
+        # catch which type of token the token we got is and invoke that Class
         if k == 't_lambda':
-            result = Lambda()
+            token_result = Lambda()
         elif k == 't_left_paren':
-            result = LParen()
+            token_result = LParen()
         elif k == 't_right_paren':
-            result = RParen()
+            token_result = RParen()
         elif k == 't_variable':
-            result = VarToken(token)
+            token_result = VarToken(token)
         elif k == 't_dot':
-            result = Period()
+            token_result = Period()
         elif k == 't_whitespace':
-            result = Whitespace()
+            token_result = Whitespace()
 
-    return (result, rest)
+    return token_result, rest
+
 
 def tokenize(text: str):
+    """
+    Lexer of source code
+    takes in raw text and spits out list of tokens
+
+    :param text: Lambda Calculus source code
+    :return: list of all tokens in the source code
+    """
     tokens_list = []
 
     while len(text) > 0:
@@ -101,12 +153,20 @@ def tokenize(text: str):
     return tokens_list
 
 
-
 class Node:
+    """
+    base class of three kinds of Terms
+    """
     def __init__(self):
         pass
 
+
 class Variable(Node):
+    """
+    Variable node (Ex. 'x')
+
+    Attr NAME is the character/name/value of the variable
+    """
     def __init__(self, variable_name: str):
         super().__init__()
         self.name = variable_name
@@ -114,28 +174,59 @@ class Variable(Node):
     def __repr__(self):
         return self.name
 
+
 class Abstraction(Node):
+    """
+    Abstraction term node (Ex. 'Lx.Ly.x')
+
+    Attr VARIABLE is the name of the bound variable (Ex. would be 'x')
+    Attr EXPRESSION is the inner expression of function (Ex. would be Abstraction 'Ly.x')
+    """
     def __init__(self, variable_name: str, exp: Node):
         super().__init__()
         self.variable = variable_name
         self.expression = exp
 
     def __repr__(self):
+        """
+        Display the actual whole term (wrapped in parentheses)
+        :return: "(Lx.Ly.x)"
+        """
         return f'(L{self.variable}.{self.expression.__repr__()})'
 
+
 class Application(Node):
+    """
+    Application term node (Ex. "x y", x applied to y)
+
+    Attr FN is left term (the function or value being applied to the right) (Ex. 'x')
+    Attr OPERAND is the right term (Ex. 'y')
+    """
     def __init__(self, term_a: Node, term_b: Node):
         super().__init__()
         self.fn = term_a
         self.operand = term_b
 
     def __repr__(self):
+        """
+        Display the actual application of two terms (wrapped in parentheses)
+        :return: '(x y)'
+        """
         return f'({self.fn.__repr__()}) ({self.operand.__repr__()})'
 
-#
+
 def parse_expression(token_list, do_app, depth):
+    """
+    Parses an entire expression of Lambda Calculus
+    :param token_list: List of all tokens in source code
+    :param do_app: On/Off flag telling is whether we want to apply terms in inner-expressions (yes for Ab and Paren)
+    :param depth: Depth of recursive calls to parse (0 is top level)
+    :return: Expression in terms of abstract classes, ready for evaluator and rest of source code (eventually [])
+    """
     result = None
+    # for printing for clarity
     prefix = '\t' * depth
+    # special print to include prefixes. also can be turned off
     print_pre = lambda v: print(f'{prefix}{v}')
     print_pre('--------------------------------------------------')
     print_pre(f"parse_expression({token_list}, {do_app}, {depth})")
@@ -197,41 +288,56 @@ def parse_expression(token_list, do_app, depth):
 
     return expr, rest
 
-highest = 0
 
 def eval_expr(expr):
+    """
+    Reduces entire expression of Lambda Calculus
+    :param expr: Expression given from parse_expression()[0]
+    :return: Reduced Lambda Calculus expression
+    """
     global highest
     if isinstance(expr, Abstraction):
+        # if Abstraction, then recursively evaluate and reduce inner expression then return rewritten Abstraction
         return Abstraction(expr.variable, eval_expr(expr.expression))
 
     # if variable, leave
+    # if isinstance(expr, Variable) ???
     if not isinstance(expr, Application):
         return expr
 
+    # must be some kind of Application henceforth
+
     if not isinstance(expr.fn, Abstraction):
+        # if left is NOT an Abstraction, first try to reduce left term
         reduced_left = eval_expr(expr.fn)
         if not isinstance(reduced_left, Abstraction):
+            # if still not an abstraction, then we apply LEFT term to recursively evaluated RIGHT term
             return Application(reduced_left, eval_expr(expr.operand))
 
+        # if left became an abstraction, then we just apply it to recursively evaluated RIGHT term
         return eval_expr(Application(reduced_left, eval_expr(expr.operand)))
 
-    # when applying (Lx. T1) T2
-    # we just return T1[x->T2]
-
+    # Alpha reduction, making sure no redundant variable names
+    # get names of variables in LEFT of Application
     to_replace = get_variable_names(eval_expr(expr.fn))
+    # RIGHT term
     op = expr.operand
+    # loop through RIGHT and replace any problematic variables with numbers to ensure no further repeats
     for v in to_replace:
         op = rename_variable(v, str(highest), op)
         highest += 1
 
+    # substitute RIGHT in to LEFT (replace LEFT variable, with RIGHT expression, in LEFT expression)
+    # then reduce
     return eval_expr(substitute_expr(expr.fn.variable, op, expr.fn.expression))
 
-# (Lx.x y) T
-
-# subst(x, 'x y', T)
-# Application(subst(x, 'x', T), subst(x, 'y', T))
 
 def get_variable_names(expr):
+    """
+    Get names of all variables (yes, even bound to ENSURE no issues) in LEFT function of Application
+    :param expr: LEFT expression
+    :return: set of variable names
+    """
     if isinstance(expr, Variable):
         return { expr.name }
     elif isinstance(expr, Application):
@@ -240,6 +346,13 @@ def get_variable_names(expr):
         return {expr.variable} | get_variable_names(expr.expression)
 
 def rename_variable(old : str, new : str, expr):
+    """
+    Rename variables in RIGHT term of Application with novel numbers to ensure no overloaded variables
+    :param old: Old name of variable
+    :param new: New name given by global HIGHEST
+    :param expr: Expression in which replacements are done
+    :return:
+    """
     if isinstance(expr, Variable):
         return Variable(new if expr.name == old else expr.name)
     elif isinstance(expr, Application):
@@ -267,40 +380,64 @@ def substitute_expr(var_name: str, applicand, expr):
 
         # variable and replacor is same, we're just distributing across both terms
         clean_sub = func.partial(substitute_expr, var_name, applicand)
-        return Application(clean_sub(expr.fn), clean_sub(expr.operand))
+        subbed_left = clean_sub(expr.fn)
+        subbed_right = clean_sub(expr.operand)
+        return Application(subbed_left, subbed_right)
 
 
-def make_unique(expr, next_id):
-    if isinstance(expr, Application):
-        l, nxt = make_unique(expr.fn, next_id)
-        r, nxt = make_unique(expr.operand, nxt)
-        return Application(l, r), nxt
-    elif isinstance(expr, Abstraction):
-        replaced = substitute_expr(expr.variable, Variable(next_id), expr.expression)
-        inner, nxt = make_unique(replaced, next_id + 1)
-        return Abstraction(next_id, inner), nxt
-    elif isinstance(expr, Variable):
-        return expr, next_id
+# def make_unique(expr, next_id):
+#     if isinstance(expr, Application):
+#         l, nxt = make_unique(expr.fn, next_id)
+#         r, nxt = make_unique(expr.operand, nxt)
+#         return Application(l, r), nxt
+#     elif isinstance(expr, Abstraction):
+#         replaced = substitute_expr(expr.variable, Variable(next_id), expr.expression)
+#         inner, nxt = make_unique(replaced, next_id + 1)
+#         return Abstraction(next_id, inner), nxt
+#     elif isinstance(expr, Variable):
+#         return expr, next_id
 
 if __name__ == '__main__':
-    # expression = '(Lx.a x) d'
-    expression = '(Lm.Ln.m (La.Lb.Lc.b (a b c)) n) (Lx.Ly.x (x y)) (Ls.Lz.s z)'
-    # expression = '(Ln.Ls.Lz.s (n s z)) (Ls.Lz.z)'
+    def lambda_interpret(lambda_str):
+
+        print('--------START TOKENIZING---------')
+        tokens = tokenize(lambda_str)
+        print('--------DONE TOKENIZING---------')
+        print(f'TOKENS: {tokens}')
+
+        print('--------START PARSING--------')
+        parsed, _ = parse_expression(tokens, True, depth=0)
+        print('--------DONE PARSING--------')
+        print(f'PARSED EXPR: {parsed}')
+
+        print('--------START EVALUATING--------')
+        result = eval_expr(parsed)
+        print('--------DONE EVALUATING--------')
 
 
-    print('--------START TOKENIZING---------')
-    tokens = tokenize(expression)
-    print('--------DONE TOKENIZING---------')
-    print(f'TOKENS: {tokens}')
+        print(f'\n\n\nRESULT: {result}')
 
-    print('--------START PARSING--------')
-    parsed, _ = parse_expression(tokens, True, depth=0)
-    print('--------DONE PARSING--------')
-    print(f'PARSED EXPR: {parsed}')
 
-    print('--------START EVALUATING--------')
-    result = eval_expr(parsed)
+    test_strings = {
+        'simple_sub': '(Lx.a x) d',
+        'ADD 2 1': '(Lm.Ln.m (La.Lb.Lc.b (a b c)) n) (Lx.Ly.x (x y)) (Lx.Ly.x y)',
+        'SCC 0': '(Ln.Ls.Lz.s (n s z)) (Ls.Lz.z)',
+        # this is technically correct, however the variables are rather ambiguous
+        '3 2 (2^3)': '(Lx.Ly.x (x (x y))) (La.Lb.a (a b))',
+        #
+        'TRU x y': '(Lx.Ly.x) x y',
+        'FLS x y': '(Lx.Ly.y) x y',
 
-    print('--------DONE EVALUATING--------')
-    print(f'RESULT: {result}')
-    # print(parse_expression(tokenize('a b c'), True, depth=0))
+    }
+
+    lambda_interpret(test_strings['3 2 (2^3)'])
+
+    """
+    Notes
+    
+    - need to improve Alpha reduction, because while technically correct, sometimes answers make no sense
+    ---see 3 2 (2^3)
+    
+    - does this work for a whole file?
+    ---right now our reducer only works for one expression. 
+    """
