@@ -1,0 +1,5 @@
+zero = Ls.Lz.z
+scc = Ln.Ls.Lz.s (n s z)
+add = Lm.Ln.m scc n
+add zero (scc zero)
+scc (scc zero)

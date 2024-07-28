@@ -84,6 +84,13 @@ class Equals(Token):
     def __init__(self, text):
         super().__init__(text)
 
+class Newline(Token):
+    """
+    New line Token
+    """
+    def __init__(self, text):
+        super().__init__(text)
+
 
 token_dict = {
     't_lambda': (r'L', Lambda),
@@ -91,8 +98,9 @@ token_dict = {
     't_right_paren': (r'\)', RParen),
     't_variable': (r'[a-z]+', VarToken),
     't_dot': (r'\.', Period),
-    't_whitespace': (r'\s+', Whitespace),
-    't_equals': (r'=', Equals)
+    't_whitespace': (r' +', Whitespace),
+    't_equals': (r'=', Equals),
+    't_newline': (r'\n', Newline)
 }
 
 def build_token_grabber():
@@ -151,7 +159,7 @@ def tokenize(text: str):
     return tokens_list
 
 
-class Node:
+class ExprNode:
     """
     base class of three kinds of Terms
     """
@@ -159,7 +167,7 @@ class Node:
         pass
 
 
-class Variable(Node):
+class Variable(ExprNode):
     """
     Variable node (Ex. 'x')
 
@@ -173,14 +181,14 @@ class Variable(Node):
         return self.name
 
 
-class Abstraction(Node):
+class Abstraction(ExprNode):
     """
     Abstraction term node (Ex. 'Lx.Ly.x')
 
     Attr VARIABLE is the name of the bound variable (Ex. would be 'x')
     Attr EXPRESSION is the inner expression of function (Ex. would be Abstraction 'Ly.x')
     """
-    def __init__(self, variable_name: str, exp: Node):
+    def __init__(self, variable_name: str, exp: ExprNode):
         super().__init__()
         self.variable = variable_name
         self.expression = exp
@@ -201,14 +209,14 @@ class Abstraction(Node):
     #     return str(x)
 
 
-class Application(Node):
+class Application(ExprNode):
     """
     Application term node (Ex. "x y", x applied to y)
 
     Attr FN is left term (the function or value being applied to the right) (Ex. 'x')
     Attr OPERAND is the right term (Ex. 'y')
     """
-    def __init__(self, term_a: Node, term_b: Node):
+    def __init__(self, term_a: ExprNode, term_b: ExprNode):
         super().__init__()
         self.fn = term_a
         self.operand = term_b
@@ -219,6 +227,88 @@ class Application(Node):
         :return: '(x y)'
         """
         return f'({self.fn.__repr__()}) ({self.operand.__repr__()})'
+
+
+class StmtNode:
+    def __init__(self):
+        pass
+
+
+class ExprStmt(StmtNode):
+    def __init__(self, expr_node: ExprNode):
+        super().__init__()
+        self.expr = expr_node
+
+    def __repr__(self):
+        return f"ExprStmt({repr(self.expr)})"
+
+class AssignmentStmt(StmtNode):
+    def __init__(self, name: str, expr_node: ExprNode):
+        super().__init__()
+        self.name = name
+        self.expr = expr_node
+
+    def __repr__(self):
+        return f"Assignment: {self.name} <--> {repr(self.expr)}"
+
+
+
+class BlockStmt(StmtNode):
+    def __init__(self, stmt: StmtNode, rest: StmtNode):
+        super().__init__()
+        self.stmt = stmt
+        self.rest = rest
+
+    def __repr__(self):
+        return f"Block: {repr(self.stmt)}, \n\trest:{repr(self.rest)}"
+
+
+class NullStmt(StmtNode):
+    def __init__(self):
+        super().__init__()
+
+    def __repr__(self):
+        return 'NULL'
+
+
+def parse_statement(token_list, depth):
+    print(f'parse_statement({token_list}, {depth})')
+    result = None
+    rest = None
+    if len(token_list) == 0:
+        return NullStmt(), []
+
+    is_assign = False
+    i = 0
+    if isinstance(token_list[i], VarToken):
+        i += 1
+        while i < len(token_list) and isinstance(token_list[i], Whitespace):
+            i += 1
+        if i < len(token_list) and isinstance(token_list[i], Equals):
+            is_assign = True
+            i += 1
+            while i < len(token_list) and isinstance(token_list[i], Whitespace):
+                i += 1
+            parsed, rest = parse_expression(token_list[i:], do_app=True, depth=0)
+            result = AssignmentStmt(token_list[0].text, parsed)
+
+    if not is_assign:
+        result, rest = parse_expression(token_list, do_app=True, depth=0)
+        result = ExprStmt(result)
+
+    i = 0
+    while i < len(rest) and isinstance(rest[i], Whitespace):
+        i += 1
+
+    if i < len(rest) and not isinstance(rest[i], Newline):
+        raise Exception('Need new line between statements')
+    i += 1
+
+    parsed, rest = parse_statement(rest[i:], depth + 1)
+
+    return BlockStmt(result, parsed), rest
+
+
 
 
 def parse_expression(token_list, do_app, depth):
@@ -260,6 +350,7 @@ def parse_expression(token_list, do_app, depth):
     elif isinstance(token_list[0], VarToken):
         # return variable and rest
         print_pre(f"Found variable: {token_list[0].text}, parsing rest: {token_list[1:]}")
+
         result = Variable(token_list[0].text), token_list[1:]
 
     # if we see left paren
@@ -271,13 +362,18 @@ def parse_expression(token_list, do_app, depth):
             raise Exception('Unmatched left parenthesis')
         print_pre(f"-> paren-term: {sub_expr}")
         result = sub_expr, rest[1:]
+    elif isinstance(token_list[0], Newline):
+        raise Exception("Newline??")
     else:
-        raise Exception("Invalid program")
+        raise Exception(f"Invalid program, saw token: {token_list[0]}")
 
     # after getting a valid expression built, unpack
     expr, rest = result
     # if a whitespace follows the expression
     if do_app:
+        if rest != [] and isinstance(rest[0], Newline):
+            return expr, rest
+
         while rest != [] and isinstance(rest[0], Whitespace):
             print_pre(f"-> APPLYING because we have term on left and whitespace following:")
             # term_b of the application is FIRST expression of rest
@@ -459,5 +555,12 @@ if __name__ == '__main__':
     #           using our desired abstraction for MUL, it doesnt
     # res = lambda_interpret(f"{church(4)} ({add} {church(3)}) ({church(0)})")
 
-    res = lambda_interpret(test_strings['3 2 (2^3)'])
+    # res = lambda_interpret(test_strings['3 2 (2^3)'])
     # lambda_interpret(f"(((Lm.(Ln.((m) (((Lx.(Ly.((x) ((Ln.(Ls.(Lz.(s) (((n) (s)) (z))))))) (y)))) (n))) ((Ls.(Lz.z)))))) ((Ls.(Lz.(s) ((s) ((s) ((s) (z)))))))) ((Ls.(Lz.(s) ((s) ((s) (z))))))")
+
+with open('code.lambda', 'r') as fn:
+    text = fn.read()
+
+tokens = tokenize(text)
+print(f"TOKENS: {tokens}")
+print(f"PARSED: {parse_statement(tokens, depth=0)}")
