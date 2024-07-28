@@ -352,42 +352,42 @@ def eval_expr(expr, depth):
 
 
     # return eval_expr(substitute_expr(expr.fn.variable, op, expr.fn.expression), depth + 1)
-    return eval_expr(substitute_expr(expr.fn.expression, expr.fn.variable, expr.operand), depth + 1)
+    return eval_expr(substitute_expr(expr.fn.variable, expr.operand, expr.fn.expression), depth + 1)
 
 
-def get_variable_names(expr):
-    """
-    Get names of all variables (yes, even bound to ENSURE no issues) in LEFT function of Application
-    :param expr: LEFT expression
-    :return: set of variable names
-    """
-    if isinstance(expr, Variable):
-        return { expr.name }
-    elif isinstance(expr, Application):
-        return get_variable_names(expr.fn) | get_variable_names(expr.operand)
-    elif isinstance(expr, Abstraction):
-        return {expr.variable} | get_variable_names(expr.expression)
+# def get_variable_names(expr):
+#     """
+#     Get names of all variables (yes, even bound to ENSURE no issues) in LEFT function of Application
+#     :param expr: LEFT expression
+#     :return: set of variable names
+#     """
+#     if isinstance(expr, Variable):
+#         return { expr.name }
+#     elif isinstance(expr, Application):
+#         return get_variable_names(expr.fn) | get_variable_names(expr.operand)
+#     elif isinstance(expr, Abstraction):
+#         return {expr.variable} | get_variable_names(expr.expression)
 
-def rename_variable(old : str, new : str, expr):
-    """
-    Rename variables in RIGHT term of Application with novel numbers to ensure no overloaded variables
-    :param old: Old name of variable
-    :param new: New name given by global HIGHEST
-    :param expr: Expression in which replacements are done
-    :return:
-    """
-    if isinstance(expr, Variable):
-        if new == expr.name:
-            print(f"Renaming: {expr} -> {new}")
-        return Variable(new if expr.name == old else expr.name)
-    elif isinstance(expr, Application):
-        return Application(rename_variable(old, new, expr.fn), rename_variable(old, new, expr.operand))
-    elif isinstance(expr, Abstraction):
-        if expr.variable == old:
-            print(f"quasi renaming {old} -> {new}")
-            return Abstraction(new, rename_variable(old, new, expr.expression))
-        print(f"renaming {old} -> {new}")
-        return Abstraction(expr.variable, rename_variable(old, new, expr.expression))
+# def rename_variable(old : str, new : str, expr):
+#     """
+#     Rename variables in RIGHT term of Application with novel numbers to ensure no overloaded variables
+#     :param old: Old name of variable
+#     :param new: New name given by global HIGHEST
+#     :param expr: Expression in which replacements are done
+#     :return:
+#     """
+#     if isinstance(expr, Variable):
+#         if new == expr.name:
+#             print(f"Renaming: {expr} -> {new}")
+#         return Variable(new if expr.name == old else expr.name)
+#     elif isinstance(expr, Application):
+#         return Application(rename_variable(old, new, expr.fn), rename_variable(old, new, expr.operand))
+#     elif isinstance(expr, Abstraction):
+#         if expr.variable == old:
+#             print(f"quasi renaming {old} -> {new}")
+#             return Abstraction(new, rename_variable(old, new, expr.expression))
+#         print(f"renaming {old} -> {new}")
+#         return Abstraction(expr.variable, rename_variable(old, new, expr.expression))
 
 def is_free(variable, expr):
     """
@@ -423,7 +423,7 @@ def substitute_expr(var_name: str, applicand, expr):
             # find variables in expr.expression
             abs_body = expr.expression
             abs_var = expr.variable
-            if is_free(applicand, abs_var):
+            if is_free(abs_var, applicand):
                 abs_var = str(highest)
                 abs_body = substitute_expr(expr.variable, Variable(abs_var), abs_body)
                 highest += 1
