@@ -5,6 +5,8 @@
 """
 import re
 import functools as func
+import time
+
 # global variable used to Alpha-reduce expressions with same variable name
 highest = 0
 
@@ -194,6 +196,14 @@ class Abstraction(Node):
         """
         return f'(L{self.variable}.{self.expression.__repr__()})'
 
+    # def __str__(self):
+    #     succ_var = self.variable
+    #     x = 0
+    #     for s in self.expression.__repr__():
+    #         if s == succ_var:
+    #             x += 1
+    #     return str(x)
+
 
 class Application(Node):
     """
@@ -240,7 +250,7 @@ def parse_expression(token_list, do_app, depth):
         elif not isinstance(token_list[2], Period):
             raise Exception('Period must follow {Lambda}{Variable}')
 
-        print_pre(f"{depth}. Found Lambda: {token_list[:3]}, parsing: {token_list[3:]}\n\n")
+        print_pre(f"Found Lambda: {token_list[:3]}, parsing: {token_list[3:]}\n\n")
         # sub_expression is chunked expression, then rest is rest of token list
         sub_expr, rest = parse_expression(token_list[3:], True, depth + 1)
 
@@ -253,12 +263,12 @@ def parse_expression(token_list, do_app, depth):
     # if we get just a raw variable, that's the term, return it and the rest separately
     elif isinstance(token_list[0], VarToken):
         # return variable and rest
-        print_pre(f"{depth}. Found variable: {token_list[0].val}, parsing rest: {token_list[1:]}")
+        print_pre(f"Found variable: {token_list[0].val}, parsing rest: {token_list[1:]}")
         result = Variable(token_list[0].val), token_list[1:]
 
     # if we see left paren
     elif isinstance(token_list[0], LParen):
-        print_pre(f"{depth}. Found '(', parsing rest: {token_list[1:]}\n\n")
+        print_pre(f"Found '(', parsing rest: {token_list[1:]}\n\n")
         sub_expr, rest = parse_expression(token_list[1:], True, depth + 1)
         print_pre(f"-> Sub expr: {sub_expr}, rest: {rest}")
         if not isinstance(rest[0], RParen):
@@ -289,47 +299,60 @@ def parse_expression(token_list, do_app, depth):
     return expr, rest
 
 
-def eval_expr(expr):
+def eval_expr(expr, depth):
     """
     Reduces entire expression of Lambda Calculus
     :param expr: Expression given from parse_expression()[0]
     :return: Reduced Lambda Calculus expression
     """
+    prefix = '\t' * depth
+    # special print to include prefixes. also can be turned off
+    print_pre = lambda v: print(f'{time.sleep(.0005)}{prefix}{v}')
+
+
     global highest
     if isinstance(expr, Abstraction):
         # if Abstraction, then recursively evaluate and reduce inner expression then return rewritten Abstraction
-        return Abstraction(expr.variable, eval_expr(expr.expression))
+        print_pre(f"Abstraction: {expr}")
+        return Abstraction(expr.variable, eval_expr(expr.expression, depth + 1))
 
     # if variable, leave
     # if isinstance(expr, Variable) ???
     if not isinstance(expr, Application):
+        print_pre(f"Eval Variable, pass: {expr}")
         return expr
 
     # must be some kind of Application henceforth
-
+    print_pre(f"Application: {expr}")
     if not isinstance(expr.fn, Abstraction):
+        print_pre(f"Evaluating left operator: {expr.fn}")
         # if left is NOT an Abstraction, first try to reduce left term
-        reduced_left = eval_expr(expr.fn)
+        reduced_left = eval_expr(expr.fn, depth + 1)
         if not isinstance(reduced_left, Abstraction):
             # if still not an abstraction, then we apply LEFT term to recursively evaluated RIGHT term
-            return Application(reduced_left, eval_expr(expr.operand))
+            print_pre(f"Still not an abstraction ({reduced_left}) so applying to evaluated ({expr.operand})")
+            return Application(reduced_left, eval_expr(expr.operand, depth + 1))
 
         # if left became an abstraction, then we just apply it to recursively evaluated RIGHT term
-        return eval_expr(Application(reduced_left, eval_expr(expr.operand)))
+        print_pre(f"Evaluate: {reduced_left} <-> EVAL({expr.operand})")
+        return eval_expr(Application(reduced_left, eval_expr(expr.operand, depth + 1)), depth + 1)
 
     # Alpha reduction, making sure no redundant variable names
     # get names of variables in LEFT of Application
-    to_replace = get_variable_names(eval_expr(expr.fn))
-    # RIGHT term
-    op = expr.operand
+    # to_replace = get_variable_names(eval_expr(expr.fn, depth + 1))
+    # # RIGHT term
+    # op = expr.operand
     # loop through RIGHT and replace any problematic variables with numbers to ensure no further repeats
-    for v in to_replace:
-        op = rename_variable(v, str(highest), op)
-        highest += 1
+    # for v in to_replace:
+    #     op = rename_variable(v, v[0]+str(highest), op)
+    #     highest += 1
 
     # substitute RIGHT in to LEFT (replace LEFT variable, with RIGHT expression, in LEFT expression)
     # then reduce
-    return eval_expr(substitute_expr(expr.fn.variable, op, expr.fn.expression))
+
+
+    # return eval_expr(substitute_expr(expr.fn.variable, op, expr.fn.expression), depth + 1)
+    return eval_expr(substitute_expr(expr.fn.expression, expr.fn.variable, expr.operand), depth + 1)
 
 
 def get_variable_names(expr):
@@ -354,35 +377,69 @@ def rename_variable(old : str, new : str, expr):
     :return:
     """
     if isinstance(expr, Variable):
+        if new == expr.name:
+            print(f"Renaming: {expr} -> {new}")
         return Variable(new if expr.name == old else expr.name)
     elif isinstance(expr, Application):
         return Application(rename_variable(old, new, expr.fn), rename_variable(old, new, expr.operand))
     elif isinstance(expr, Abstraction):
         if expr.variable == old:
+            print(f"quasi renaming {old} -> {new}")
             return Abstraction(new, rename_variable(old, new, expr.expression))
+        print(f"renaming {old} -> {new}")
         return Abstraction(expr.variable, rename_variable(old, new, expr.expression))
 
+def is_free(variable, expr):
+    """
+    :param variable: variable in question that were searching for in expression
+    :param expr: expression in which we're searching
+    :return: True if variable is free in expr, false if not
+    """
+    if isinstance(expr, Variable):
+        return variable == expr.name
+
+    elif isinstance(expr, Abstraction):
+        if variable == expr.variable:
+            return False
+        return is_free(variable, expr.expression)
+
+    elif isinstance(expr, Application):
+        return is_free(variable, expr.fn) or is_free(variable, expr.operand)
+
+
 def substitute_expr(var_name: str, applicand, expr):
+    global highest
     if isinstance(expr, Variable):
         if expr.name == var_name:
             return applicand
         else:
             return expr
     elif isinstance(expr, Abstraction):
+        # Ly.Lx.
+        # if x            =     y
         if expr.variable == var_name:
             return expr
         else:
-            inner_subbed_expr = substitute_expr(var_name, applicand, expr.expression)
-            return Abstraction(expr.variable, inner_subbed_expr)
+            # find variables in expr.expression
+            abs_body = expr.expression
+            abs_var = expr.variable
+            if is_free(applicand, abs_var):
+                abs_var = str(highest)
+                abs_body = substitute_expr(expr.variable, Variable(abs_var), abs_body)
+                highest += 1
+                # return Abstraction(new_var, substitute_expr(var_name, applicand, new_body))
+            inner_subbed_expr = substitute_expr(var_name, applicand, abs_body)
+            return Abstraction(abs_var, inner_subbed_expr)
     elif isinstance(expr, Application):
         # What is (T1 T2)[var_name->applicand]
         # T1[var_name->applicand] T2[var_name->applicand]
 
         # variable and replacor is same, we're just distributing across both terms
-        clean_sub = func.partial(substitute_expr, var_name, applicand)
-        subbed_left = clean_sub(expr.fn)
-        subbed_right = clean_sub(expr.operand)
-        return Application(subbed_left, subbed_right)
+        # clean_sub = func.partial(substitute_expr, var_name, applicand)
+        # subbed_left = clean_sub(expr.fn)
+        # subbed_right = clean_sub(expr.operand)
+        # return Application(subbed_left, subbed_right)
+        return Application(substitute_expr(var_name, applicand, expr.fn), substitute_expr(var_name, applicand, expr.operand))
 
 
 # def make_unique(expr, next_id):
@@ -411,27 +468,53 @@ if __name__ == '__main__':
         print(f'PARSED EXPR: {parsed}')
 
         print('--------START EVALUATING--------')
-        result = eval_expr(parsed)
+        result = eval_expr(parsed, depth=0)
         print('--------DONE EVALUATING--------')
 
 
         print(f'\n\n\nRESULT: {result}')
+        return result
 
+    def church_num_from_int(n: int):
+        if n == 0:
+            return f"(Ls.Lz.z)"
+        elif n == 1:
+            return f"(Ls.Lz.s z)"
+        return f"(Ls.Lz.s {'(s '*(n-1) } z{')'*(n-1)})"
 
     test_strings = {
         'simple_sub': '(Lx.a x) d',
         'ADD 2 1': '(Lm.Ln.m (La.Lb.Lc.b (a b c)) n) (Lx.Ly.x (x y)) (Lx.Ly.x y)',
         'SCC 0': '(Ln.Ls.Lz.s (n s z)) (Ls.Lz.z)',
+        'SCC 1': '(Ln.Ls.Lz.s (n s z)) (Ls.Lz.s z)',
         # this is technically correct, however the variables are rather ambiguous
         '3 2 (2^3)': '(Lx.Ly.x (x (x y))) (La.Lb.a (a b))',
         #
         'TRU x y': '(Lx.Ly.x) x y',
         'FLS x y': '(Lx.Ly.y) x y',
+        '6 2': '(Lx.Ly.x (x (x (x (x (x y)))))) (La.Lb.a (a b))'
 
     }
 
-    lambda_interpret(test_strings['3 2 (2^3)'])
+    scc = '(Ln.Ls.Lz.s (n s z))'
+    # add = f'(Lm.Ln.m ({scc} n))'
+    add = f'(Lx.Ly.x {scc} y)'
+    # mul = f'(Lm.Ln.m ((Lf.Lg.f ((Lh.Lj.Lk.j (h j k)) g)) n) (Ls.Lz.z))'
+    mul = f"(Lm.Ln.m ({add} n) (Ls.Lz.z))"
+    church = church_num_from_int
+    # res = lambda_interpret(f'{add} ({church_num} {church_num})')
+    # res = lambda_interpret('(Ln.Ls.Lz.s (n s z)) ((Ln.Ls.Lz.s (n s z)) (Lq.Lr.q r))')
 
+    # mul = f"(Lm.Ln.m ({add} n) (Ls.Lz.z))"
+    # this is MUL 4 3
+    # this works
+
+    # add and scc also works fully fine. hand typing MUL with 4 and 3 plugged in works, but when
+    #           using our desired abstraction for MUL, it doesnt
+    # res = lambda_interpret(f"{church(4)} ({add} {church(3)}) ({church(0)})")
+
+    # res = lambda_interpret(f"{mul} {church(4)} {church(3)}")
+    lambda_interpret(f"(((Lm.(Ln.((m) (((Lx.(Ly.((x) ((Ln.(Ls.(Lz.(s) (((n) (s)) (z))))))) (y)))) (n))) ((Ls.(Lz.z)))))) ((Ls.(Lz.(s) ((s) ((s) ((s) (z)))))))) ((Ls.(Lz.(s) ((s) ((s) (z))))))")
     """
     Notes
     
@@ -440,4 +523,8 @@ if __name__ == '__main__':
     
     - does this work for a whole file?
     ---right now our reducer only works for one expression. 
+    
+    
+    
+    Ok right now, it can only really handle SCC, ADD is hard
     """
