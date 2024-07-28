@@ -96,11 +96,11 @@ token_dict = {
     't_lambda': (r'L', Lambda),
     't_left_paren': (r'\(', LParen),
     't_right_paren': (r'\)', RParen),
-    't_variable': (r'[a-z]+', VarToken),
+    't_variable': (r'[a-z][a-zA-Z]*', VarToken),
     't_dot': (r'\.', Period),
     't_whitespace': (r' +', Whitespace),
     't_equals': (r'=', Equals),
-    't_newline': (r'\n', Newline)
+    't_newline': (r'\n[\s]*', Newline)
 }
 
 def build_token_grabber():
@@ -233,6 +233,9 @@ class StmtNode:
     def __init__(self):
         pass
 
+    def __str__(self):
+        return repr(self)
+
 
 class ExprStmt(StmtNode):
     def __init__(self, expr_node: ExprNode):
@@ -260,7 +263,7 @@ class BlockStmt(StmtNode):
         self.rest = rest
 
     def __repr__(self):
-        return f"Block: {repr(self.stmt)}, \n\trest:{repr(self.rest)}"
+        return f"(Block: {repr(self.stmt)}, \n\trest:{repr(self.rest)})"
 
 
 class NullStmt(StmtNode):
@@ -309,6 +312,29 @@ def parse_statement(token_list, depth):
     return BlockStmt(result, parsed), rest
 
 
+def compile_tree(stmt: StmtNode, bindings=None):
+    bindings = bindings or dict()
+    if isinstance(stmt, ExprStmt):
+        e = stmt.expr
+        for key in bindings:
+            e = substitute_expr(key, bindings[key], e)
+        return ExprStmt(e), bindings
+
+    elif isinstance(stmt, NullStmt):
+        return stmt, bindings
+
+    elif isinstance(stmt, AssignmentStmt):
+        bindings = dict(bindings)
+        e = stmt.expr
+        for key in bindings:
+            e = substitute_expr(key, bindings[key], e)
+        bindings[stmt.name] = e
+        return AssignmentStmt(stmt.name, e), bindings
+
+    elif isinstance(stmt, BlockStmt):
+        new_stmt, new_bindings = compile_tree(stmt.stmt, bindings)
+        rest_compiled, new_bindings = compile_tree(stmt.rest, new_bindings)
+        return BlockStmt(new_stmt, rest_compiled), new_bindings
 
 
 def parse_expression(token_list, do_app, depth):
@@ -399,7 +425,7 @@ def eval_expr(expr, depth):
     """
     prefix = '\t' * depth
     # special print to include prefixes. also can be turned off
-    print_pre = lambda v: print(f'{time.sleep(.0005)}{prefix}{v}')
+    print_pre = lambda v: print(f'{time.sleep(.00075)}{prefix}{v}')
 
 
     global highest
@@ -445,6 +471,22 @@ def eval_expr(expr, depth):
 
     # return eval_expr(substitute_expr(expr.fn.variable, op, expr.fn.expression), depth + 1)
     return eval_expr(substitute_expr(expr.fn.variable, expr.operand, expr.fn.expression), depth + 1)
+
+
+def eval_stmt(compiled_tree):
+    if isinstance(compiled_tree, NullStmt):
+        return []
+
+    elif isinstance(compiled_tree, AssignmentStmt):
+        return []
+
+    elif isinstance(compiled_tree, ExprStmt):
+        return [eval_expr(compiled_tree.expr, depth=0)]
+
+    elif isinstance(compiled_tree, BlockStmt):
+        return eval_stmt(compiled_tree.stmt) + eval_stmt(compiled_tree.rest)
+    else:
+        raise Exception(f"Error: saw value of type {type(compiled_tree)}")
 
 
 def is_free(variable, expr):
@@ -563,4 +605,10 @@ with open('code.lambda', 'r') as fn:
 
 tokens = tokenize(text)
 print(f"TOKENS: {tokens}")
-print(f"PARSED: {parse_statement(tokens, depth=0)}")
+parsed = parse_statement(tokens, depth=0)
+print(f"PARSED: {parsed[0]}")
+compiled_tree = compile_tree(parsed[0])
+print(f"REWRITTEN: {compiled_tree[0]}")
+
+evaluated = eval_stmt(compiled_tree[0])
+print(f"\n\n\nEVALUATED: {'\n'.join([ str(e) for e in evaluated ])}")

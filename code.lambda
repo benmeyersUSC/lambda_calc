@@ -3,3 +3,6 @@ scc = Ln.Ls.Lz.s (n s z)
 add = Lm.Ln.m scc n
 add zero (scc zero)
 scc (scc zero)
+mul = Lm.Ln.m (add n) zero
+
+mul (scc (scc zero)) (scc (scc (scc zero)))
