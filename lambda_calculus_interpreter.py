@@ -10,30 +10,14 @@ import time
 # global variable used to Alpha-reduce expressions with same variable name
 highest = 0
 
-def build_token_grabber():
-    """
-    Construct RegEx string for tokenizer
-    :return: RegEx string for re.match based on all token types
-    """
-    token_dict = {
-        't_lambda': r'L',
-        't_left_paren': r'\(',
-        't_right_paren': r'\)',
-        't_variable': r'[a-z]+',
-        't_dot': r'\.',
-        't_whitespace': r'\s+'
-    }
-    dct = token_dict
-    return r'^(' + '|'.join([ f'(?P<{k}>{dct[k]})' for k in dct ]) + ')'
-
 
 class Token:
     """
     Base class for token types
     Essentially just for REPR to return name of which Token child instance it is
     """
-    def __init__(self):
-        pass
+    def __init__(self, text):
+        self.text = text
 
     def __repr__(self):
         return self.__class__.__name__
@@ -43,24 +27,24 @@ class LParen(Token):
     """
     Left parenthesis Token
     """
-    def __init__(self):
-        super().__init__()
+    def __init__(self, text):
+        super().__init__(text)
 
 
 class RParen(Token):
     """
     Right parenthesis Token
     """
-    def __init__(self):
-        super().__init__()
+    def __init__(self, text):
+        super().__init__(text)
 
 
 class Lambda(Token):
     """
     lambda call ("L") Token
     """
-    def __init__(self):
-        super().__init__()
+    def __init__(self, text):
+        super().__init__(text)
 
 
 class VarToken(Token):
@@ -68,32 +52,56 @@ class VarToken(Token):
     Token for any variable
     - Attribute VAL is the value or name of the variable
     """
-    def __init__(self, val: str):
-        super().__init__()
-        self.val = val
+    def __init__(self, text):
+        super().__init__(text)
     def __repr__(self):
         """
         Give instance name, not class name
         :return: name/VAL of variable, not the name VarToken
         """
-        return super().__repr__() + f': {self.val}'
+        return super().__repr__() + f': {self.text}'
 
 
 class Whitespace(Token):
     """
     Whitespace token
     """
-    def __init__(self):
-        super().__init__()
+    def __init__(self, text):
+        super().__init__(text)
 
 
 class Period(Token):
     """
     Period Token
     """
-    def __init__(self):
-        super().__init__()
+    def __init__(self, text):
+        super().__init__(text)
 
+class Equals(Token):
+    """
+    Equal sign token
+    """
+    def __init__(self, text):
+        super().__init__(text)
+
+
+token_dict = {
+    't_lambda': (r'L', Lambda),
+    't_left_paren': (r'\(', LParen),
+    't_right_paren': (r'\)', RParen),
+    't_variable': (r'[a-z]+', VarToken),
+    't_dot': (r'\.', Period),
+    't_whitespace': (r'\s+', Whitespace),
+    't_equals': (r'=', Equals)
+}
+
+def build_token_grabber():
+    """
+    Construct RegEx string for tokenizer
+    :return: RegEx string for re.match based on all token types
+    """
+    dct = token_dict
+    return r'^(' + '|'.join([ f'(?P<{k}>{dct[k][0]})' for k in dct ]) + ')'
 
 def take_next_token(text: str) -> tuple:
     """
@@ -121,19 +129,7 @@ def take_next_token(text: str) -> tuple:
         mtch = dct[k]
         if mtch is None:
             continue
-        # catch which type of token the token we got is and invoke that Class
-        if k == 't_lambda':
-            token_result = Lambda()
-        elif k == 't_left_paren':
-            token_result = LParen()
-        elif k == 't_right_paren':
-            token_result = RParen()
-        elif k == 't_variable':
-            token_result = VarToken(token)
-        elif k == 't_dot':
-            token_result = Period()
-        elif k == 't_whitespace':
-            token_result = Whitespace()
+        token_result = token_dict[k][1](token)
 
     return token_result, rest
 
@@ -254,17 +250,17 @@ def parse_expression(token_list, do_app, depth):
         # sub_expression is chunked expression, then rest is rest of token list
         sub_expr, rest = parse_expression(token_list[3:], True, depth + 1)
 
-        print_pre(f"\n-> Asbtraction: L{token_list[1].val}. {sub_expr}\n")
+        print_pre(f"\n-> Asbtraction: L{token_list[1].text}. {sub_expr}\n")
         # turn verified Lambda abstraction into Abstraction
-        expr = Abstraction(token_list[1].val, sub_expr)
+        expr = Abstraction(token_list[1].text, sub_expr)
         print_pre(f"-> Parsing rest: {rest}")
         result = expr, rest
 
     # if we get just a raw variable, that's the term, return it and the rest separately
     elif isinstance(token_list[0], VarToken):
         # return variable and rest
-        print_pre(f"Found variable: {token_list[0].val}, parsing rest: {token_list[1:]}")
-        result = Variable(token_list[0].val), token_list[1:]
+        print_pre(f"Found variable: {token_list[0].text}, parsing rest: {token_list[1:]}")
+        result = Variable(token_list[0].text), token_list[1:]
 
     # if we see left paren
     elif isinstance(token_list[0], LParen):
@@ -355,40 +351,6 @@ def eval_expr(expr, depth):
     return eval_expr(substitute_expr(expr.fn.variable, expr.operand, expr.fn.expression), depth + 1)
 
 
-# def get_variable_names(expr):
-#     """
-#     Get names of all variables (yes, even bound to ENSURE no issues) in LEFT function of Application
-#     :param expr: LEFT expression
-#     :return: set of variable names
-#     """
-#     if isinstance(expr, Variable):
-#         return { expr.name }
-#     elif isinstance(expr, Application):
-#         return get_variable_names(expr.fn) | get_variable_names(expr.operand)
-#     elif isinstance(expr, Abstraction):
-#         return {expr.variable} | get_variable_names(expr.expression)
-
-# def rename_variable(old : str, new : str, expr):
-#     """
-#     Rename variables in RIGHT term of Application with novel numbers to ensure no overloaded variables
-#     :param old: Old name of variable
-#     :param new: New name given by global HIGHEST
-#     :param expr: Expression in which replacements are done
-#     :return:
-#     """
-#     if isinstance(expr, Variable):
-#         if new == expr.name:
-#             print(f"Renaming: {expr} -> {new}")
-#         return Variable(new if expr.name == old else expr.name)
-#     elif isinstance(expr, Application):
-#         return Application(rename_variable(old, new, expr.fn), rename_variable(old, new, expr.operand))
-#     elif isinstance(expr, Abstraction):
-#         if expr.variable == old:
-#             print(f"quasi renaming {old} -> {new}")
-#             return Abstraction(new, rename_variable(old, new, expr.expression))
-#         print(f"renaming {old} -> {new}")
-#         return Abstraction(expr.variable, rename_variable(old, new, expr.expression))
-
 def is_free(variable, expr):
     """
     :param variable: variable in question that were searching for in expression
@@ -434,25 +396,9 @@ def substitute_expr(var_name: str, applicand, expr):
         # What is (T1 T2)[var_name->applicand]
         # T1[var_name->applicand] T2[var_name->applicand]
 
-        # variable and replacor is same, we're just distributing across both terms
-        # clean_sub = func.partial(substitute_expr, var_name, applicand)
-        # subbed_left = clean_sub(expr.fn)
-        # subbed_right = clean_sub(expr.operand)
-        # return Application(subbed_left, subbed_right)
+
         return Application(substitute_expr(var_name, applicand, expr.fn), substitute_expr(var_name, applicand, expr.operand))
 
-
-# def make_unique(expr, next_id):
-#     if isinstance(expr, Application):
-#         l, nxt = make_unique(expr.fn, next_id)
-#         r, nxt = make_unique(expr.operand, nxt)
-#         return Application(l, r), nxt
-#     elif isinstance(expr, Abstraction):
-#         replaced = substitute_expr(expr.variable, Variable(next_id), expr.expression)
-#         inner, nxt = make_unique(replaced, next_id + 1)
-#         return Abstraction(next_id, inner), nxt
-#     elif isinstance(expr, Variable):
-#         return expr, next_id
 
 if __name__ == '__main__':
     def lambda_interpret(lambda_str):
@@ -489,7 +435,7 @@ if __name__ == '__main__':
         'SCC 1': '(Ln.Ls.Lz.s (n s z)) (Ls.Lz.s z)',
         # this is technically correct, however the variables are rather ambiguous
         '3 2 (2^3)': '(Lx.Ly.x (x (x y))) (La.Lb.a (a b))',
-        #
+
         'TRU x y': '(Lx.Ly.x) x y',
         'FLS x y': '(Lx.Ly.y) x y',
         '6 2': '(Lx.Ly.x (x (x (x (x (x y)))))) (La.Lb.a (a b))'
@@ -513,18 +459,5 @@ if __name__ == '__main__':
     #           using our desired abstraction for MUL, it doesnt
     # res = lambda_interpret(f"{church(4)} ({add} {church(3)}) ({church(0)})")
 
-    # res = lambda_interpret(f"{mul} {church(4)} {church(3)}")
-    lambda_interpret(f"(((Lm.(Ln.((m) (((Lx.(Ly.((x) ((Ln.(Ls.(Lz.(s) (((n) (s)) (z))))))) (y)))) (n))) ((Ls.(Lz.z)))))) ((Ls.(Lz.(s) ((s) ((s) ((s) (z)))))))) ((Ls.(Lz.(s) ((s) ((s) (z))))))")
-    """
-    Notes
-    
-    - need to improve Alpha reduction, because while technically correct, sometimes answers make no sense
-    ---see 3 2 (2^3)
-    
-    - does this work for a whole file?
-    ---right now our reducer only works for one expression. 
-    
-    
-    
-    Ok right now, it can only really handle SCC, ADD is hard
-    """
+    res = lambda_interpret(test_strings['3 2 (2^3)'])
+    # lambda_interpret(f"(((Lm.(Ln.((m) (((Lx.(Ly.((x) ((Ln.(Ls.(Lz.(s) (((n) (s)) (z))))))) (y)))) (n))) ((Ls.(Lz.z)))))) ((Ls.(Lz.(s) ((s) ((s) ((s) (z)))))))) ((Ls.(Lz.(s) ((s) ((s) (z))))))")
