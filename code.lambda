@@ -1,14 +1,14 @@
-zero = Ls.Lz.z
+_ZERO = Ls.Lz.z
 scc = Ln.Ls.Lz.s (n s z)
 pred = Ln.Lf.Lx.n (Lg.Lh.h (g f)) (Lu.x) (Lu.u)
 sub = Lm.Ln.n pred m
-one = scc zero
+one = scc _ZERO
 two = scc one
 three = scc two
 four = scc three
 add = Lm.Ln.m scc n
 pow = Lx.Ly.y x
-mul = Lm.Ln.m (add n) zero
+mul = Lm.Ln.m (add n) _ZERO
 tru = Lx.Ly.x
 fls = Lx.Ly.y
 
