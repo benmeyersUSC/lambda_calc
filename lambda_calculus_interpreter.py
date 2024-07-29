@@ -2,7 +2,7 @@ import re
 
 # global variable used to Alpha-reduce expressions with same variable name
 highest = 0
-
+exprs = []
 
 class Token:
     """
@@ -299,7 +299,6 @@ def parse_statement(token_list, depth):
     :return: Parsed SYNTAX TREE of entire file, with Statements and Blocks at highest level
                 Also return rest during recursion, final should be []
     """
-    print(f'parse_statement({token_list}, {depth})')
     result = None
     rest = None
     if len(token_list) == 0:
@@ -343,11 +342,13 @@ def compile_tree(stmt: StmtNode, bindings=None):
     :param bindings: dictionary of bindings (ie 'zero' -> 'Ls.Lz.z')
     :return: renamed, pre-compiled to just expressions, syntax tree, and the bindings dict
     """
+    global exprs
     bindings = bindings or dict()
     if isinstance(stmt, ExprStmt):
         e = stmt.expr
         for key in bindings:
             e = substitute_expr(key, bindings[key], e)
+        exprs.append(repr(stmt.expr))
         return ExprStmt(e), bindings
 
     elif isinstance(stmt, NullStmt):
@@ -382,8 +383,10 @@ def parse_expression(token_list, do_app, depth):
     result = None
     # for printing for clarity
     prefix = '\t' * depth
+
     # special print to include prefixes. also can be turned off
-    print_pre = lambda v: print(f'{prefix}{v}')
+    # print_pre = lambda v: print(f'{prefix}{v}')
+    print_pre = lambda v: None
     print_pre('--------------------------------------------------')
     print_pre(f"parse_expression({token_list}, {do_app}, {depth})")
 
@@ -459,7 +462,8 @@ def eval_expr(expr, depth):
     """
     prefix = '\t' * depth
     # special print to include prefixes. also can be turned off
-    print_pre = lambda v: print(f'{prefix}{v}')
+    # print_pre = lambda v: print(f'{prefix}{v}')
+    print_pre = lambda v: None
 
 
     global highest
@@ -614,7 +618,7 @@ def visualize_tree_ascii(node, prefix="", is_last=True):
     if isinstance(node, Variable):
         tree_str += f"Variable: {node.name}\n"
     elif isinstance(node, Abstraction):
-        tree_str += f"Abstraction: λ{node.variable}. {node.expression}\n"
+        tree_str += f"Abstraction: L{node.variable}. {node.expression}\n"
         new_prefix = prefix + ("    " if is_last else "│   ")
         tree_str += visualize_tree_ascii(node.expression, new_prefix, True)
     elif isinstance(node, Application):
@@ -645,7 +649,6 @@ def save_tree_visualization_ascii(root_node, filename='lambda_calculus_tree.txt'
     tree_str = visualize_tree_ascii(root_node)
     with open(filename, 'w') as f:
         f.write(tree_str)
-    print(f"Enhanced ASCII tree visualization saved as {filename}")
 
 
 def lambda_interpret_file_viz(filename):
@@ -666,8 +669,10 @@ def lambda_interpret_file_viz(filename):
     save_tree_visualization_ascii(compiled_tree[0], f'{filename}_compiled_tree.txt')
 
     evaluated = eval_stmt(compiled_tree[0])
-    print(f"\n\n\nEVALUATED: {'\n'.join([str(e) for e in evaluated])}")
 
+    print(f'\nPROGRAM:')
+    for x, y in zip(exprs, evaluated):
+        print(f"{x} --> {y}")
     return evaluated
 
 if __name__ == '__main__':

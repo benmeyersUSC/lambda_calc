@@ -1,7 +1,7 @@
 zero = Ls.Lz.z
 scc = Ln.Ls.Lz.s (n s z)
 pred = Ln.Lf.Lx.n (Lg.Lh.h (g f)) (Lu.x) (Lu.u)
-sub = Ln.Lm.n pred m
+sub = Lm.Ln.n pred m
 one = scc zero
 two = scc one
 three = scc two
@@ -12,5 +12,9 @@ mul = Lm.Ln.m (add n) zero
 tru = Lx.Ly.x
 fls = Lx.Ly.y
 
-(add four four) pred (add (mul three two) (add four three))
-sub three four
+yeaThree = add one two
+yeaTwo = sub four two
+
+
+yeaThree
+mul yeaTwo yeaThree
