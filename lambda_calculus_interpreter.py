@@ -1,4 +1,3 @@
-
 import re
 
 # global variable used to Alpha-reduce expressions with same variable name
@@ -608,9 +607,72 @@ def lambda_interpret_file(filename):
     print(f"\n\n\nEVALUATED: {'\n'.join([ str(e) for e in evaluated ])}")
 
 
+def visualize_tree_ascii(node, prefix="", is_last=True):
+    tree_str = prefix
+    tree_str += "└── " if is_last else "├── "
+
+    if isinstance(node, Variable):
+        tree_str += f"Variable: {node.name}\n"
+    elif isinstance(node, Abstraction):
+        tree_str += f"Abstraction: λ{node.variable}. {node.expression}\n"
+        new_prefix = prefix + ("    " if is_last else "│   ")
+        tree_str += visualize_tree_ascii(node.expression, new_prefix, True)
+    elif isinstance(node, Application):
+        tree_str += f"Application: ({node.fn}) ({node.operand})\n"
+        new_prefix = prefix + ("    " if is_last else "│   ")
+        tree_str += visualize_tree_ascii(node.fn, new_prefix, False)
+        tree_str += visualize_tree_ascii(node.operand, new_prefix, True)
+    elif isinstance(node, ExprStmt):
+        tree_str += f"ExprStmt: {node.expr}\n"
+        new_prefix = prefix + ("    " if is_last else "│   ")
+        tree_str += visualize_tree_ascii(node.expr, new_prefix, True)
+    elif isinstance(node, AssignmentStmt):
+        tree_str += f"AssignmentStmt: {node.name} = {node.expr}\n"
+        new_prefix = prefix + ("    " if is_last else "│   ")
+        tree_str += visualize_tree_ascii(node.expr, new_prefix, True)
+    elif isinstance(node, BlockStmt):
+        tree_str += "BlockStmt\n"
+        new_prefix = prefix + ("    " if is_last else "│   ")
+        tree_str += visualize_tree_ascii(node.stmt, new_prefix, False)
+        tree_str += visualize_tree_ascii(node.rest, new_prefix, True)
+    elif isinstance(node, NullStmt):
+        tree_str += "NullStmt\n"
+
+    return tree_str
+
+
+def save_tree_visualization_ascii(root_node, filename='lambda_calculus_tree.txt'):
+    tree_str = visualize_tree_ascii(root_node)
+    with open(filename, 'w') as f:
+        f.write(tree_str)
+    print(f"Enhanced ASCII tree visualization saved as {filename}")
+
+
+def lambda_interpret_file_viz(filename):
+    with open(filename, 'r') as fn:
+        text = fn.read()
+    tokens = tokenize(text)
+    print(f"TOKENS: {tokens}")
+    parsed = parse_statement(tokens, depth=0)
+    print(f"PARSED: {parsed[0]}")
+
+    # Visualize the parsed tree
+    save_tree_visualization_ascii(parsed[0], f'{filename}_parsed_tree.txt')
+
+    compiled_tree = compile_tree(parsed[0])
+    print(f"REWRITTEN: {compiled_tree[0]}")
+
+    # Visualize the compiled tree
+    save_tree_visualization_ascii(compiled_tree[0], f'{filename}_compiled_tree.txt')
+
+    evaluated = eval_stmt(compiled_tree[0])
+    print(f"\n\n\nEVALUATED: {'\n'.join([str(e) for e in evaluated])}")
+
+    return evaluated
+
 if __name__ == '__main__':
 
-    lambda_interpret_file('code.lambda')
+    lambda_interpret_file_viz('code.lambda')
 
 """
 At the end, check for variables that are numbers, then choose from list of letters to replace them with if 
