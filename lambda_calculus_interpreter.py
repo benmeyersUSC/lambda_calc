@@ -1,8 +1,8 @@
 import re
 
 # global variable used to Alpha-reduce expressions with same variable name
-highest = 0
-exprs = []
+HIGHEST = 0
+EXPRS = []
 
 class Token:
     """
@@ -342,13 +342,13 @@ def compile_tree(stmt: StmtNode, bindings=None):
     :param bindings: dictionary of bindings (ie 'zero' -> 'Ls.Lz.z')
     :return: renamed, pre-compiled to just expressions, syntax tree, and the bindings dict
     """
-    global exprs
+    global EXPRS
     bindings = bindings or dict()
     if isinstance(stmt, ExprStmt):
         e = stmt.expr
         for key in bindings:
             e = substitute_expr(key, bindings[key], e)
-        exprs.append(repr(stmt.expr))
+        EXPRS.append(repr(stmt.expr))
         return ExprStmt(e), bindings
 
     elif isinstance(stmt, NullStmt):
@@ -466,7 +466,7 @@ def eval_expr(expr, depth):
     print_pre = lambda v: None
 
 
-    global highest
+    global HIGHEST
     if isinstance(expr, Abstraction):
         # if Abstraction, then recursively evaluate and reduce inner expression then return rewritten Abstraction
         print_pre(f"Abstraction: {expr}")
@@ -542,7 +542,7 @@ def substitute_expr(var_name: str, applicand, expr):
     :param expr: context in which substitution should happen
     :return: new statement post substitution
     """
-    global highest
+    global HIGHEST
     if isinstance(expr, Variable):
         if expr.name == var_name:
             return applicand
@@ -558,9 +558,9 @@ def substitute_expr(var_name: str, applicand, expr):
             abs_body = expr.expression
             abs_var = expr.variable
             if is_free(abs_var, applicand):
-                abs_var = str(highest)
+                abs_var = str(HIGHEST)
                 abs_body = substitute_expr(expr.variable, Variable(abs_var), abs_body)
-                highest += 1
+                HIGHEST += 1
             inner_subbed_expr = substitute_expr(var_name, applicand, abs_body)
             return Abstraction(abs_var, inner_subbed_expr)
     elif isinstance(expr, Application):
@@ -651,6 +651,8 @@ def save_tree_visualization_ascii(root_node, filename='lambda_calculus_tree.txt'
         f.write(tree_str)
 
 
+
+
 def lambda_interpret_file_viz(filename):
     with open(filename, 'r') as fn:
         text = fn.read()
@@ -664,16 +666,20 @@ def lambda_interpret_file_viz(filename):
 
     compiled_tree = compile_tree(parsed[0])
     print(f"REWRITTEN: {compiled_tree[0]}")
-
     # Visualize the compiled tree
-    save_tree_visualization_ascii(compiled_tree[0], f'{filename}_compiled_tree.txt')
 
     evaluated = eval_stmt(compiled_tree[0])
 
     print(f'\nPROGRAM:')
-    for x, y in zip(exprs, evaluated):
+    for x, y in zip(EXPRS, evaluated):
         print(f"{x} --> {y}")
     return evaluated
+
+
+
+
+
+
 
 if __name__ == '__main__':
 

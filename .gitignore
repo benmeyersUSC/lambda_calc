@@ -1,3 +1,4 @@
 .idea/
+lib
 code.lambda_compiled_tree.txt
 code.lambda_parsed_tree.txt
