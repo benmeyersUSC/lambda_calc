@@ -1,8 +1,16 @@
 zero = Ls.Lz.z
 scc = Ln.Ls.Lz.s (n s z)
+pred = Ln.Lf.Lx.n (Lg.Lh.h (g f)) (Lu.x) (Lu.u)
+sub = Ln.Lm.n pred m
+one = scc zero
+two = scc one
+three = scc two
+four = scc three
 add = Lm.Ln.m scc n
-add zero (scc zero)
-scc (scc zero)
+pow = Lx.Ly.y x
 mul = Lm.Ln.m (add n) zero
+tru = Lx.Ly.x
+fls = Lx.Ly.y
 
-mul (scc (scc zero)) (scc (scc (scc zero)))
+(add four four) pred (add (mul three two) (add four three))
+sub three four

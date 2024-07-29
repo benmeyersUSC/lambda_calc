@@ -1,11 +1,5 @@
-"""
-- lexing (turning strings into named tokens we can work with)
-- parsing (turn tokens into tree)
-- interpret (take a tree and interpret directly)
-"""
+
 import re
-import functools as func
-import time
 
 # global variable used to Alpha-reduce expressions with same variable name
 highest = 0
@@ -77,12 +71,14 @@ class Period(Token):
     def __init__(self, text):
         super().__init__(text)
 
+
 class Equals(Token):
     """
     Equal sign token
     """
     def __init__(self, text):
         super().__init__(text)
+
 
 class Newline(Token):
     """
@@ -103,6 +99,7 @@ token_dict = {
     't_newline': (r'\n[\s]*', Newline)
 }
 
+
 def build_token_grabber():
     """
     Construct RegEx string for tokenizer
@@ -110,6 +107,7 @@ def build_token_grabber():
     """
     dct = token_dict
     return r'^(' + '|'.join([ f'(?P<{k}>{dct[k][0]})' for k in dct ]) + ')'
+
 
 def take_next_token(text: str) -> tuple:
     """
@@ -230,6 +228,11 @@ class Application(ExprNode):
 
 
 class StmtNode:
+    """
+    Base class for a statement in a program
+    can be an expression or an assignment
+    OR a block of multiple Statements
+    """
     def __init__(self):
         pass
 
@@ -238,6 +241,10 @@ class StmtNode:
 
 
 class ExprStmt(StmtNode):
+    """
+    A statement which is an expression, ie an application
+    on a file, it is a non-assignment/definition statament
+    """
     def __init__(self, expr_node: ExprNode):
         super().__init__()
         self.expr = expr_node
@@ -245,7 +252,11 @@ class ExprStmt(StmtNode):
     def __repr__(self):
         return f"ExprStmt({repr(self.expr)})"
 
+
 class AssignmentStmt(StmtNode):
+    """
+    Definition of a function with a name and expression value
+    """
     def __init__(self, name: str, expr_node: ExprNode):
         super().__init__()
         self.name = name
@@ -255,8 +266,11 @@ class AssignmentStmt(StmtNode):
         return f"Assignment: {self.name} <--> {repr(self.expr)}"
 
 
-
 class BlockStmt(StmtNode):
+    """
+    Multiple statements warrant a Block
+    Block = Stmt, rest (can be another block or statement)
+    """
     def __init__(self, stmt: StmtNode, rest: StmtNode):
         super().__init__()
         self.stmt = stmt
@@ -267,6 +281,9 @@ class BlockStmt(StmtNode):
 
 
 class NullStmt(StmtNode):
+    """
+    useful Null statement class that does nothing
+    """
     def __init__(self):
         super().__init__()
 
@@ -275,6 +292,14 @@ class NullStmt(StmtNode):
 
 
 def parse_statement(token_list, depth):
+    """
+    Parse a statement out of tokens, in this stage subbing in NAMES of defined terms
+    ie we define: zero = Ls.Lz.z  --> then when called, 'zero' will be in tree spot not expression
+    :param token_list: List of tokens lexed from file
+    :param depth: For printing, how many recursions are we in
+    :return: Parsed SYNTAX TREE of entire file, with Statements and Blocks at highest level
+                Also return rest during recursion, final should be []
+    """
     print(f'parse_statement({token_list}, {depth})')
     result = None
     rest = None
@@ -313,6 +338,12 @@ def parse_statement(token_list, depth):
 
 
 def compile_tree(stmt: StmtNode, bindings=None):
+    """
+    Take parsed syntax tree with assignment names that need to be replaced with their value
+    :param stmt: syntax tree of nested StmtNodes
+    :param bindings: dictionary of bindings (ie 'zero' -> 'Ls.Lz.z')
+    :return: renamed, pre-compiled to just expressions, syntax tree, and the bindings dict
+    """
     bindings = bindings or dict()
     if isinstance(stmt, ExprStmt):
         e = stmt.expr
@@ -329,11 +360,15 @@ def compile_tree(stmt: StmtNode, bindings=None):
         for key in bindings:
             e = substitute_expr(key, bindings[key], e)
         bindings[stmt.name] = e
-        return AssignmentStmt(stmt.name, e), bindings
+        return NullStmt(), bindings
 
     elif isinstance(stmt, BlockStmt):
         new_stmt, new_bindings = compile_tree(stmt.stmt, bindings)
         rest_compiled, new_bindings = compile_tree(stmt.rest, new_bindings)
+        if isinstance(new_stmt, NullStmt):
+            return rest_compiled, new_bindings
+        elif isinstance(rest_compiled, NullStmt):
+            return new_stmt, new_bindings
         return BlockStmt(new_stmt, rest_compiled), new_bindings
 
 
@@ -425,7 +460,7 @@ def eval_expr(expr, depth):
     """
     prefix = '\t' * depth
     # special print to include prefixes. also can be turned off
-    print_pre = lambda v: print(f'{time.sleep(.00075)}{prefix}{v}')
+    print_pre = lambda v: print(f'{prefix}{v}')
 
 
     global highest
@@ -435,7 +470,6 @@ def eval_expr(expr, depth):
         return Abstraction(expr.variable, eval_expr(expr.expression, depth + 1))
 
     # if variable, leave
-    # if isinstance(expr, Variable) ???
     if not isinstance(expr, Application):
         print_pre(f"Eval Variable, pass: {expr}")
         return expr
@@ -455,25 +489,15 @@ def eval_expr(expr, depth):
         print_pre(f"Evaluate: {reduced_left} <-> EVAL({expr.operand})")
         return eval_expr(Application(reduced_left, eval_expr(expr.operand, depth + 1)), depth + 1)
 
-    # Alpha reduction, making sure no redundant variable names
-    # get names of variables in LEFT of Application
-    # to_replace = get_variable_names(eval_expr(expr.fn, depth + 1))
-    # # RIGHT term
-    # op = expr.operand
-    # loop through RIGHT and replace any problematic variables with numbers to ensure no further repeats
-    # for v in to_replace:
-    #     op = rename_variable(v, v[0]+str(highest), op)
-    #     highest += 1
-
-    # substitute RIGHT in to LEFT (replace LEFT variable, with RIGHT expression, in LEFT expression)
-    # then reduce
-
-
-    # return eval_expr(substitute_expr(expr.fn.variable, op, expr.fn.expression), depth + 1)
     return eval_expr(substitute_expr(expr.fn.variable, expr.operand, expr.fn.expression), depth + 1)
 
 
 def eval_stmt(compiled_tree):
+    """
+    Large final function to evaluate file:: uses eval_expr
+    :param compiled_tree: file compiled into syntax tree of nested Statements
+    :return: List of evaluated/reduced expressions in file. lists each
+    """
     if isinstance(compiled_tree, NullStmt):
         return []
 
@@ -508,6 +532,13 @@ def is_free(variable, expr):
 
 
 def substitute_expr(var_name: str, applicand, expr):
+    """
+    Used in application as well as plugging-in of bound definitions
+    :param var_name: Variable being replaced
+    :param applicand: the term/statement getting subbed in
+    :param expr: context in which substitution should happen
+    :return: new statement post substitution
+    """
     global highest
     if isinstance(expr, Variable):
         if expr.name == var_name:
@@ -527,88 +558,60 @@ def substitute_expr(var_name: str, applicand, expr):
                 abs_var = str(highest)
                 abs_body = substitute_expr(expr.variable, Variable(abs_var), abs_body)
                 highest += 1
-                # return Abstraction(new_var, substitute_expr(var_name, applicand, new_body))
             inner_subbed_expr = substitute_expr(var_name, applicand, abs_body)
             return Abstraction(abs_var, inner_subbed_expr)
     elif isinstance(expr, Application):
-        # What is (T1 T2)[var_name->applicand]
-        # T1[var_name->applicand] T2[var_name->applicand]
-
 
         return Application(substitute_expr(var_name, applicand, expr.fn), substitute_expr(var_name, applicand, expr.operand))
 
 
+def lambda_interpret_expr(lambda_expr):
+
+    print('--------START TOKENIZING---------')
+    tokens = tokenize(lambda_expr)
+    print('--------DONE TOKENIZING---------')
+    print(f'TOKENS: {tokens}')
+
+    print('--------START PARSING--------')
+    parsed, _ = parse_expression(tokens, True, depth=0)
+    print('--------DONE PARSING--------')
+    print(f'PARSED EXPR: {parsed}')
+
+    print('--------START EVALUATING--------')
+    result = eval_expr(parsed, depth=0)
+    print('--------DONE EVALUATING--------')
+
+
+    print(f'\n\n\nRESULT: {result}')
+    return result
+
+
+def church_num_from_int(n: int):
+    if n == 0:
+        return f"(Ls.Lz.z)"
+    elif n == 1:
+        return f"(Ls.Lz.s z)"
+    return f"(Ls.Lz.s {'(s '*(n-1) } z{')'*(n-1)})"
+
+
+def lambda_interpret_file(filename):
+    with open(filename, 'r') as fn:
+        text = fn.read()
+    tokens = tokenize(text)
+    print(f"TOKENS: {tokens}")
+    parsed = parse_statement(tokens, depth=0)
+    print(f"PARSED: {parsed[0]}")
+    compiled_tree = compile_tree(parsed[0])
+    print(f"REWRITTEN: {compiled_tree[0]}")
+
+    evaluated = eval_stmt(compiled_tree[0])
+    print(f"\n\n\nEVALUATED: {'\n'.join([ str(e) for e in evaluated ])}")
+
+
 if __name__ == '__main__':
-    def lambda_interpret(lambda_str):
 
-        print('--------START TOKENIZING---------')
-        tokens = tokenize(lambda_str)
-        print('--------DONE TOKENIZING---------')
-        print(f'TOKENS: {tokens}')
+    lambda_interpret_file('code.lambda')
 
-        print('--------START PARSING--------')
-        parsed, _ = parse_expression(tokens, True, depth=0)
-        print('--------DONE PARSING--------')
-        print(f'PARSED EXPR: {parsed}')
-
-        print('--------START EVALUATING--------')
-        result = eval_expr(parsed, depth=0)
-        print('--------DONE EVALUATING--------')
-
-
-        print(f'\n\n\nRESULT: {result}')
-        return result
-
-    def church_num_from_int(n: int):
-        if n == 0:
-            return f"(Ls.Lz.z)"
-        elif n == 1:
-            return f"(Ls.Lz.s z)"
-        return f"(Ls.Lz.s {'(s '*(n-1) } z{')'*(n-1)})"
-
-    test_strings = {
-        'simple_sub': '(Lx.a x) d',
-        'ADD 2 1': '(Lm.Ln.m (La.Lb.Lc.b (a b c)) n) (Lx.Ly.x (x y)) (Lx.Ly.x y)',
-        'SCC 0': '(Ln.Ls.Lz.s (n s z)) (Ls.Lz.z)',
-        'SCC 1': '(Ln.Ls.Lz.s (n s z)) (Ls.Lz.s z)',
-        # this is technically correct, however the variables are rather ambiguous
-        '3 2 (2^3)': '(Lx.Ly.x (x (x y))) (La.Lb.a (a b))',
-
-        'TRU x y': '(Lx.Ly.x) x y',
-        'FLS x y': '(Lx.Ly.y) x y',
-        '6 2': '(Lx.Ly.x (x (x (x (x (x y)))))) (La.Lb.a (a b))'
-
-    }
-
-    scc = '(Ln.Ls.Lz.s (n s z))'
-    # add = f'(Lm.Ln.m ({scc} n))'
-    add = f'(Lx.Ly.x {scc} y)'
-    # mul = f'(Lm.Ln.m ((Lf.Lg.f ((Lh.Lj.Lk.j (h j k)) g)) n) (Ls.Lz.z))'
-    mul = f"(Lm.Ln.m ({add} n) (Ls.Lz.z))"
-    church = church_num_from_int
-    # res = lambda_interpret(f'{add} ({church_num} {church_num})')
-    # res = lambda_interpret('(Ln.Ls.Lz.s (n s z)) ((Ln.Ls.Lz.s (n s z)) (Lq.Lr.q r))')
-
-    # mul = f"(Lm.Ln.m ({add} n) (Ls.Lz.z))"
-    # this is MUL 4 3
-    # this works
-
-    # add and scc also works fully fine. hand typing MUL with 4 and 3 plugged in works, but when
-    #           using our desired abstraction for MUL, it doesnt
-    # res = lambda_interpret(f"{church(4)} ({add} {church(3)}) ({church(0)})")
-
-    # res = lambda_interpret(test_strings['3 2 (2^3)'])
-    # lambda_interpret(f"(((Lm.(Ln.((m) (((Lx.(Ly.((x) ((Ln.(Ls.(Lz.(s) (((n) (s)) (z))))))) (y)))) (n))) ((Ls.(Lz.z)))))) ((Ls.(Lz.(s) ((s) ((s) ((s) (z)))))))) ((Ls.(Lz.(s) ((s) ((s) (z))))))")
-
-with open('code.lambda', 'r') as fn:
-    text = fn.read()
-
-tokens = tokenize(text)
-print(f"TOKENS: {tokens}")
-parsed = parse_statement(tokens, depth=0)
-print(f"PARSED: {parsed[0]}")
-compiled_tree = compile_tree(parsed[0])
-print(f"REWRITTEN: {compiled_tree[0]}")
-
-evaluated = eval_stmt(compiled_tree[0])
-print(f"\n\n\nEVALUATED: {'\n'.join([ str(e) for e in evaluated ])}")
+"""
+At the end, check for variables that are numbers, then choose from list of letters to replace them with if 
+"""
